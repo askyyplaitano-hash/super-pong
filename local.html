@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PONG — LOCAL 2P</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000;
+    color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: monospace;
+  }
+  #screen { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  #menu { display: flex; flex-direction: column; align-items: center; gap: 26px; }
+  #menu h1 { font-size: 72px; font-weight: 900; letter-spacing: 12px; }
+  #start-btn {
+    width: 280px; padding: 14px; background: #fff; color: #000; border: none;
+    font-family: monospace; font-size: 15px; font-weight: 700; letter-spacing: 3px; cursor: pointer;
+  }
+  #start-btn:hover { background: #ccc; }
+  .controls-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 20px 60px;
+    font-size: 12px; color: #888; text-align: center; line-height: 2.2;
+  }
+  .col-label { font-size: 12px; color: #fff; letter-spacing: 2px; margin-bottom: 4px; font-weight: 700; }
+  .back-link { font-size: 11px; color: #555; text-decoration: none; letter-spacing: 2px; }
+  .back-link:hover { color: #fff; }
+  .hint { font-size: 11px; color: #555; letter-spacing: 2px; }
+
+  #game { display: none; flex-direction: column; align-items: center; gap: 12px; }
+  .scoreboard { display: flex; justify-content: space-between; align-items: center; width: 760px; }
+  .score-box { text-align: center; min-width: 120px; }
+  .score-num { font-size: 52px; font-weight: 900; }
+  .score-lbl { font-size: 11px; color: #888; letter-spacing: 2px; }
+  #status { font-size: 12px; color: #888; text-align: center; min-width: 160px; letter-spacing: 2px; }
+  #canvas { border: 2px solid #fff; display: block; background: #000; }
+  .game-footer { display: flex; justify-content: space-between; align-items: center; width: 760px; }
+  #back-btn {
+    padding: 6px 18px; border: 2px solid #fff; background: #000; color: #fff;
+    font-family: monospace; font-size: 11px; letter-spacing: 2px; cursor: pointer;
+  }
+  #back-btn:hover { background: #fff; color: #000; }
+  .footer-hint { font-size: 10px; color: #555; }
+
+  #win { display: none; flex-direction: column; align-items: center; gap: 22px; }
+  #win-title { font-size: 52px; font-weight: 900; letter-spacing: 6px; }
+  #win-score { font-size: 18px; color: #888; }
+  .win-btns { display: flex; gap: 12px; }
+  .win-btn {
+    padding: 12px 26px; font-family: monospace; font-size: 12px; letter-spacing: 2px;
+    cursor: pointer; border: 2px solid #fff; text-decoration: none; display: flex; align-items: center;
+  }
+  #btn-again { background: #fff; color: #000; }
+  #btn-again:hover { background: #ccc; }
+  #btn-menu { background: #000; color: #fff; }
+  #btn-menu:hover { background: #fff; color: #000; }
+</style>
+</head>
+<body>
+<div id="screen">
+
+  <div id="menu">
+    <h1>LOCAL 2P</h1>
+    <div class="controls-grid">
+      <div>
+        <div class="col-label">LEFT PLAYER</div>
+        <div>W to move up</div>
+        <div>S to move down</div>
+      </div>
+      <div>
+        <div class="col-label">RIGHT PLAYER</div>
+        <div>↑ to move up</div>
+        <div>↓ to move down</div>
+      </div>
+    </div>
+    <button id="start-btn">PLAY</button>
+    <p class="hint">SPACE to pause &nbsp;|&nbsp; First to 7 wins</p>
+    <a href="index.html" class="back-link">← BACK</a>
+  </div>
+
+  <div id="game">
+    <div class="scoreboard">
+      <div class="score-box">
+        <div id="score-l" class="score-num">0</div>
+        <div class="score-lbl">W/S — LEFT</div>
+      </div>
+      <div id="status">PRESS SPACE</div>
+      <div class="score-box">
+        <div id="score-r" class="score-num">0</div>
+        <div class="score-lbl">RIGHT — ↑↓</div>
+      </div>
+    </div>
+    <canvas id="canvas" width="760" height="480"></canvas>
+    <div class="game-footer">
+      <button id="back-btn">← MENU</button>
+      <span class="footer-hint">W/S left &nbsp;|&nbsp; ↑↓ right &nbsp;|&nbsp; SPACE pause</span>
+    </div>
+  </div>
+
+  <div id="win">
+    <div id="win-title"></div>
+    <div id="win-score"></div>
+    <div class="win-btns">
+      <button class="win-btn" id="btn-again">PLAY AGAIN</button>
+      <a class="win-btn" id="btn-menu" href="index.html">MENU</a>
+    </div>
+  </div>
+
+</div>
+<script>
+const menuEl = document.getElementById('menu');
+const gameEl = document.getElementById('game');
+const winEl  = document.getElementById('win');
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+const W = 760, H = 480, PW = 12, PH = 80, BS = 10;
+
+document.getElementById('start-btn').addEventListener('click', startGame);
+document.getElementById('back-btn').addEventListener('click', goMenu);
+document.getElementById('btn-again').addEventListener('click', startGame);
+
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if (e.key === ' ') { e.preventDefault(); togglePause(); }
+});
+document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+let left, right, ball, scoreL, scoreR, paused, running, rafId;
+
+function makeBall(dir) {
+  const angle = (Math.random() * 0.6 - 0.3);
+  const spd = 5;
+  return { x: W/2 - BS/2, y: H/2 - BS/2, vx: dir * spd * Math.cos(angle), vy: spd * Math.sin(angle), spd };
+}
+
+function goMenu() {
+  cancelAnimationFrame(rafId); running = false;
+  menuEl.style.display = 'flex'; gameEl.style.display = 'none'; winEl.style.display = 'none';
+}
+
+function startGame() {
+  menuEl.style.display = 'none'; winEl.style.display = 'none'; gameEl.style.display = 'flex';
+  scoreL = 0; scoreR = 0;
+  left  = { x: 20,          y: H/2 - PH/2 };
+  right = { x: W - 20 - PW, y: H/2 - PH/2 };
+  paused = true; running = true;
+  ball = makeBall(1);
+  document.getElementById('score-l').textContent = '0';
+  document.getElementById('score-r').textContent = '0';
+  document.getElementById('status').textContent = 'PRESS SPACE';
+  cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(loop);
+}
+
+function togglePause() {
+  if (!running) return;
+  paused = !paused;
+  document.getElementById('status').textContent = paused ? 'PAUSED' : '';
+}
+
+function loop() {
+  if (!running) return;
+  if (!paused) update();
+  draw();
+  rafId = requestAnimationFrame(loop);
+}
+
+function update() {
+  // Left player: W / S
+  if ((keys['w'] || keys['W']) && left.y > 0)       left.y -= 6;
+  if ((keys['s'] || keys['S']) && left.y < H - PH)   left.y += 6;
+
+  // Right player: arrow keys
+  if (keys['ArrowUp']   && right.y > 0)       right.y -= 6;
+  if (keys['ArrowDown'] && right.y < H - PH)   right.y += 6;
+
+  ball.x += ball.vx;
+  ball.y += ball.vy;
+
+  if (ball.y <= 0)      { ball.y = 0;      ball.vy =  Math.abs(ball.vy); }
+  if (ball.y + BS >= H) { ball.y = H - BS; ball.vy = -Math.abs(ball.vy); }
+
+  function hit(px, py, side) {
+    if (ball.x + BS > px && ball.x < px + PW && ball.y + BS > py && ball.y < py + PH) {
+      const rel = (ball.y + BS/2 - py) / PH;
+      const angle = (rel - 0.5) * Math.PI * 0.6;
+      ball.spd = Math.min(ball.spd + 0.3, 15);
+      ball.vx = side * ball.spd * Math.cos(angle);
+      ball.vy = ball.spd * Math.sin(angle);
+      ball.x  = (side === 1) ? px + PW : px - BS;
+    }
+  }
+  hit(left.x, left.y, 1);
+  hit(right.x, right.y, -1);
+
+  if (ball.x + BS < 0) {
+    scoreR++;
+    document.getElementById('score-r').textContent = scoreR;
+    if (!checkWin()) { ball = makeBall(1); paused = true; document.getElementById('status').textContent = 'PRESS SPACE'; }
+  }
+  if (ball.x > W) {
+    scoreL++;
+    document.getElementById('score-l').textContent = scoreL;
+    if (!checkWin()) { ball = makeBall(-1); paused = true; document.getElementById('status').textContent = 'PRESS SPACE'; }
+  }
+}
+
+function checkWin() {
+  if (scoreL >= 7 || scoreR >= 7) {
+    running = false; cancelAnimationFrame(rafId);
+    winEl.style.display = 'flex'; gameEl.style.display = 'none';
+    document.getElementById('win-title').textContent = (scoreL >= 7 ? 'LEFT' : 'RIGHT') + ' WINS!';
+    document.getElementById('win-score').textContent = scoreL + ' — ' + scoreR;
+    return true;
+  }
+  return false;
+}
+
+function draw() {
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  ctx.setLineDash([8, 12]); ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(W/2, 0); ctx.lineTo(W/2, H); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(left.x, left.y, PW, PH);
+  ctx.fillRect(right.x, right.y, PW, PH);
+  ctx.fillRect(Math.round(ball.x), Math.round(ball.y), BS, BS);
+}
+</script>
+</body>
+</html>

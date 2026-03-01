@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PONG — LEADERBOARD</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:#000;color:#fff;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;font-family:monospace;padding:40px 16px;}
+  .wrap{display:flex;flex-direction:column;align-items:center;gap:24px;width:100%;max-width:540px;}
+  h1{font-size:48px;font-weight:900;letter-spacing:10px;}
+  .sub{font-size:11px;color:#555;letter-spacing:3px;margin-top:-16px;}
+
+  /* user bar */
+  .user-bar{display:flex;justify-content:space-between;align-items:center;width:100%;padding:10px 14px;border:1px solid #222;}
+  .user-nick{font-size:12px;letter-spacing:2px;}
+  .user-verified{font-size:10px;color:#5f5;letter-spacing:1px;}
+  .user-anon{font-size:10px;color:#f80;letter-spacing:1px;}
+
+  /* my stats */
+  .my-stats{display:flex;gap:0;width:100%;border:2px solid #fff;}
+  .stat{flex:1;padding:16px;text-align:center;border-right:1px solid #333;}
+  .stat:last-child{border-right:none;}
+  .stat-num{font-size:32px;font-weight:900;}
+  .stat-lbl{font-size:10px;color:#888;letter-spacing:2px;margin-top:4px;}
+
+  /* table */
+  .table-header{display:grid;grid-template-columns:40px 1fr 80px 80px 80px;width:100%;padding:8px 12px;font-size:10px;color:#555;letter-spacing:2px;border-bottom:1px solid #222;}
+  .row{display:grid;grid-template-columns:40px 1fr 80px 80px 80px;width:100%;padding:10px 12px;border-bottom:1px solid #111;font-size:12px;align-items:center;}
+  .row.me{background:#111;border-color:#333;}
+  .row.gold   .rank{color:#ffd700;}
+  .row.silver .rank{color:#c0c0c0;}
+  .row.bronze .rank{color:#cd7f32;}
+  .rank{font-size:14px;font-weight:900;}
+  .nick{letter-spacing:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .wins{color:#5f5;text-align:right;}
+  .losses{color:#f55;text-align:right;}
+  .ratio{color:#aaa;text-align:right;}
+  .empty{font-size:11px;color:#555;text-align:center;padding:24px;}
+
+  .nav{display:flex;gap:12px;width:100%;}
+  .nav-btn{flex:1;padding:10px;font-family:monospace;font-size:11px;letter-spacing:2px;cursor:pointer;border:2px solid #fff;background:#000;color:#fff;text-align:center;text-decoration:none;display:block;}
+  .nav-btn:hover{background:#fff;color:#000;}
+  .nav-btn.solid{background:#fff;color:#000;}
+  .nav-btn.solid:hover{background:#ccc;}
+
+  .note{font-size:10px;color:#333;letter-spacing:1px;text-align:center;line-height:1.8;}
+  #loading{font-size:11px;color:#555;letter-spacing:2px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>RANK</h1>
+  <p class="sub">GLOBAL LEADERBOARD</p>
+
+  <div class="user-bar" id="user-bar" style="display:none">
+    <span class="user-nick" id="bar-nick">—</span>
+    <span id="bar-badge">—</span>
+  </div>
+
+  <!-- My stats (shown if logged in) -->
+  <div class="my-stats" id="my-stats" style="display:none">
+    <div class="stat">
+      <div class="stat-num" id="my-wins">0</div>
+      <div class="stat-lbl">WINS</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num" id="my-losses">0</div>
+      <div class="stat-lbl">LOSSES</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num" id="my-ratio">—</div>
+      <div class="stat-lbl">W/L</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num" id="my-rank">—</div>
+      <div class="stat-lbl">RANK</div>
+    </div>
+  </div>
+
+  <div id="loading">Loading...</div>
+
+  <div id="leaderboard-wrap" style="width:100%;display:none">
+    <div class="table-header">
+      <span>#</span><span>PLAYER</span><span style="text-align:right">WINS</span><span style="text-align:right">LOSS</span><span style="text-align:right">W/L</span>
+    </div>
+    <div id="lb-rows"></div>
+  </div>
+
+  <p class="note" id="lb-note" style="display:none">Only verified players (Google or Phone) appear here.</p>
+
+  <div class="nav">
+    <a class="nav-btn" href="index.html">← BACK</a>
+    <a class="nav-btn solid" href="online.html">PLAY ONLINE</a>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp }  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, get, query, orderByChild, limitToLast }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getAuth, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+const firebaseConfig={
+  apiKey:"AIzaSyDyZcVPRTMk8_k0Kr_prqNZ6bZlbGq1oV4",
+  authDomain:"pong-online-18210.firebaseapp.com",
+  databaseURL:"https://pong-online-18210-default-rtdb.firebaseio.com",
+  projectId:"pong-online-18210",
+  storageBucket:"pong-online-18210.firebasestorage.app",
+  messagingSenderId:"897676900222",
+  appId:"1:897676900222:web:7933fd119d9b573b9d252f"
+};
+const app=initializeApp(firebaseConfig);
+const auth=getAuth(app);
+const db=getDatabase(app);
+
+let currentUser=null;
+
+onAuthStateChanged(auth,async user=>{
+  currentUser=user;
+  if(user){
+    const snap=await get(ref(db,`users/${user.uid}`));
+    const data=snap.val()||{};
+    document.getElementById('user-bar').style.display='flex';
+    document.getElementById('bar-nick').textContent=data.nickname||user.displayName||'Player';
+    const badge=document.getElementById('bar-badge');
+    if(data.verified){badge.textContent='✓ VERIFIED';badge.className='user-verified';}
+    else{badge.textContent='ANONYMOUS';badge.className='user-anon';}
+
+    document.getElementById('my-stats').style.display='flex';
+    document.getElementById('my-wins').textContent=data.wins||0;
+    document.getElementById('my-losses').textContent=data.losses||0;
+    const w=data.wins||0,l=data.losses||0;
+    document.getElementById('my-ratio').textContent=l===0?(w>0?'∞':'—'):(w/l).toFixed(2);
+  }
+  await loadLeaderboard();
+});
+
+async function loadLeaderboard(){
+  document.getElementById('loading').style.display='block';
+  const snap=await get(ref(db,'users'));
+  document.getElementById('loading').style.display='none';
+
+  if(!snap.exists()){
+    document.getElementById('lb-rows').innerHTML='<div class="empty">No players yet.</div>';
+    document.getElementById('leaderboard-wrap').style.display='block';
+    document.getElementById('lb-note').style.display='block';
+    return;
+  }
+
+  // Only verified users in leaderboard
+  const all=Object.entries(snap.val())
+    .map(([uid,d])=>({uid,...d}))
+    .filter(d=>d.verified===true)
+    .sort((a,b)=>{
+      const wa=a.wins||0,la=a.losses||0,wb=b.wins||0,lb=b.losses||0;
+      // Sort by wins first, then by ratio
+      if(wb!==wa) return wb-wa;
+      const ra=la===0?(wa>0?9999:0):wa/la;
+      const rb=lb===0?(wb>0?9999:0):wb/lb;
+      return rb-ra;
+    });
+
+  const rowsEl=document.getElementById('lb-rows');
+  if(all.length===0){
+    rowsEl.innerHTML='<div class="empty">No verified players yet.<br>Sign in with Google or Phone to appear here.</div>';
+  } else {
+    rowsEl.innerHTML='';
+    all.forEach((p,i)=>{
+      const w=p.wins||0,l=p.losses||0;
+      const ratio=l===0?(w>0?'∞':'—'):(w/l).toFixed(2);
+      const isMe=currentUser&&p.uid===currentUser.uid;
+      const rankClass=i===0?'gold':i===1?'silver':i===2?'bronze':'';
+      const row=document.createElement('div');
+      row.className='row'+(isMe?' me':' '+rankClass);
+      row.innerHTML=`
+        <span class="rank">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</span>
+        <span class="nick">${esc(p.nickname||'Player')}${isMe?' ◀':''}</span>
+        <span class="wins">${w}</span>
+        <span class="losses">${l}</span>
+        <span class="ratio">${ratio}</span>`;
+      rowsEl.appendChild(row);
+
+      // Save my rank
+      if(isMe) document.getElementById('my-rank').textContent='#'+(i+1);
+    });
+  }
+
+  document.getElementById('leaderboard-wrap').style.display='block';
+  document.getElementById('lb-note').style.display='block';
+}
+
+function esc(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>

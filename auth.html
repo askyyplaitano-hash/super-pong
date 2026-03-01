@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PONG — SIGN IN</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:#000;color:#fff;display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:monospace;padding:16px;}
+  .wrap{display:flex;flex-direction:column;align-items:center;gap:24px;width:100%;max-width:340px;}
+  h1{font-size:56px;font-weight:900;letter-spacing:10px;}
+  .sub{font-size:11px;color:#555;letter-spacing:3px;margin-top:-16px;}
+
+  .divider{width:100%;display:flex;align-items:center;gap:10px;color:#444;font-size:10px;letter-spacing:2px;}
+  .divider::before,.divider::after{content:'';flex:1;border-top:1px solid #222;}
+
+  .btn{width:100%;padding:13px;font-family:monospace;font-size:12px;font-weight:700;letter-spacing:3px;cursor:pointer;border:none;transition:background .1s;}
+  .btn-google{background:#fff;color:#000;}
+  .btn-google:hover{background:#ddd;}
+  .btn-phone{background:#000;color:#fff;border:2px solid #fff;}
+  .btn-phone:hover{background:#fff;color:#000;}
+  .btn-anon{background:#000;color:#888;border:2px solid #333;}
+  .btn-anon:hover{border-color:#fff;color:#fff;}
+
+  .nick-row{display:flex;gap:8px;width:100%;}
+  input{flex:1;padding:11px;background:#111;border:2px solid #555;color:#fff;font-family:monospace;font-size:14px;letter-spacing:2px;}
+  input:focus{outline:none;border-color:#fff;}
+  input::placeholder{color:#333;font-size:11px;}
+
+  /* phone UI */
+  .phone-wrap{width:100%;display:flex;flex-direction:column;gap:10px;}
+  #recaptcha-container{display:flex;justify-content:center;}
+
+  #status{font-size:11px;letter-spacing:2px;text-align:center;min-height:16px;color:#888;}
+  #status.err{color:#f55;}
+  #status.ok{color:#5f5;}
+
+  .note{font-size:10px;color:#333;text-align:center;line-height:1.8;letter-spacing:1px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>PONG</h1>
+  <p class="sub">SIGN IN TO PLAY</p>
+
+  <!-- Google -->
+  <button class="btn btn-google" id="btn-google">▶ CONTINUE WITH GOOGLE</button>
+
+  <div class="divider">OR</div>
+
+  <!-- Phone -->
+  <div class="phone-wrap" id="phone-section">
+    <input type="tel" id="phone-input" placeholder="+39 333 1234567" autocomplete="tel">
+    <button class="btn btn-phone" id="btn-phone">SEND SMS CODE</button>
+    <div id="recaptcha-container"></div>
+    <div id="otp-row" style="display:none;flex-direction:column;gap:8px;">
+      <input type="text" id="otp-input" placeholder="ENTER 6-DIGIT CODE" maxlength="6" autocomplete="one-time-code">
+      <button class="btn btn-phone" id="btn-verify">VERIFY</button>
+    </div>
+  </div>
+
+  <div class="divider">OR PLAY ANONYMOUSLY</div>
+
+  <!-- Nickname -->
+  <div class="nick-row">
+    <input type="text" id="nick-input" placeholder="YOUR NICKNAME" maxlength="16" autocomplete="off">
+    <button class="btn btn-anon" style="width:auto;padding:11px 16px;" id="btn-anon">GO</button>
+  </div>
+  <p class="note">Anonymous players are not shown<br>in the global leaderboard.</p>
+
+  <div id="status"></div>
+</div>
+
+<script type="module">
+import { initializeApp }       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import {
+  getAuth, GoogleAuthProvider, signInWithPopup,
+  PhoneAuthProvider, RecaptchaVerifier, signInWithPhoneNumber, signInWithCredential,
+  signInAnonymously, updateProfile, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+const firebaseConfig={
+  apiKey:"AIzaSyDyZcVPRTMk8_k0Kr_prqNZ6bZlbGq1oV4",
+  authDomain:"pong-online-18210.firebaseapp.com",
+  databaseURL:"https://pong-online-18210-default-rtdb.firebaseio.com",
+  projectId:"pong-online-18210",
+  storageBucket:"pong-online-18210.firebasestorage.app",
+  messagingSenderId:"897676900222",
+  appId:"1:897676900222:web:7933fd119d9b573b9d252f"
+};
+const app=initializeApp(firebaseConfig);
+const auth=getAuth(app);
+const db=getDatabase(app);
+
+function setStatus(msg,cls=''){
+  const e=document.getElementById('status');
+  e.textContent=msg;e.className=cls||'';
+}
+
+// If already logged in → redirect
+onAuthStateChanged(auth,user=>{
+  if(user){
+    const dest=sessionStorage.getItem('auth_redirect')||'index.html';
+    sessionStorage.removeItem('auth_redirect');
+    window.location.href=dest;
+  }
+});
+
+async function saveUserProfile(user,nickname,verified){
+  const snap=await get(ref(db,`users/${user.uid}`));
+  if(!snap.exists()){
+    await set(ref(db,`users/${user.uid}`),{
+      nickname: nickname||user.displayName||'Player',
+      wins:0, losses:0,
+      verified: verified,
+      created:Date.now()
+    });
+  } else {
+    // Update verified status if upgraded
+    if(verified && !snap.val().verified){
+      await set(ref(db,`users/${user.uid}/verified`),true);
+    }
+  }
+}
+
+// ── Google ────────────────────────────────────────────────────
+document.getElementById('btn-google').onclick=async()=>{
+  try{
+    setStatus('Opening Google...','');
+    const provider=new GoogleAuthProvider();
+    const result=await signInWithPopup(auth,provider);
+    await saveUserProfile(result.user,result.user.displayName,true);
+    setStatus('Signed in!','ok');
+  }catch(e){
+    setStatus('Error: '+e.message,'err');
+  }
+};
+
+// ── Phone ─────────────────────────────────────────────────────
+let confirmationResult=null;
+let recaptchaVerifier=null;
+
+document.getElementById('btn-phone').onclick=async()=>{
+  const phone=document.getElementById('phone-input').value.trim();
+  if(!phone){setStatus('Enter a phone number','err');return;}
+  try{
+    setStatus('Sending SMS...','');
+    if(!recaptchaVerifier){
+      recaptchaVerifier=new RecaptchaVerifier(auth,'recaptcha-container',{size:'normal'});
+    }
+    confirmationResult=await signInWithPhoneNumber(auth,phone,recaptchaVerifier);
+    document.getElementById('otp-row').style.display='flex';
+    document.getElementById('btn-phone').style.display='none';
+    document.getElementById('phone-input').disabled=true;
+    setStatus('SMS sent! Enter the code.','ok');
+  }catch(e){
+    setStatus('Error: '+e.message,'err');
+  }
+};
+
+document.getElementById('btn-verify').onclick=async()=>{
+  const code=document.getElementById('otp-input').value.trim();
+  if(!code){setStatus('Enter the OTP code','err');return;}
+  try{
+    setStatus('Verifying...','');
+    const result=await confirmationResult.confirm(code);
+    await saveUserProfile(result.user,null,true);
+    setStatus('Verified!','ok');
+  }catch(e){
+    setStatus('Wrong code: '+e.message,'err');
+  }
+};
+
+// ── Anonymous ─────────────────────────────────────────────────
+document.getElementById('btn-anon').onclick=async()=>{
+  const nick=document.getElementById('nick-input').value.trim();
+  if(!nick){setStatus('Enter a nickname','err');return;}
+  try{
+    setStatus('Signing in...','');
+    const result=await signInAnonymously(auth);
+    await updateProfile(result.user,{displayName:nick});
+    await saveUserProfile(result.user,nick,false);
+    setStatus('Welcome, '+nick+'!','ok');
+  }catch(e){
+    setStatus('Error: '+e.message,'err');
+  }
+};
+
+// Enter key on nick
+document.getElementById('nick-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter') document.getElementById('btn-anon').click();
+});
+</script>
+</body>
+</html>
