@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PONG</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000; color: #fff;
+    display: flex; justify-content: center; align-items: center;
+    min-height: 100vh; font-family: monospace;
+  }
+  .menu { display: flex; flex-direction: column; align-items: center; gap: 28px; }
+  h1 { font-size: 100px; font-weight: 900; letter-spacing: 16px; }
+  .subtitle { font-size: 12px; color: #555; letter-spacing: 4px; margin-top: -20px; }
+
+  .mode-btn {
+    width: 320px; padding: 18px; background: #fff; color: #000; border: none;
+    font-family: monospace; font-size: 15px; font-weight: 700; letter-spacing: 3px;
+    cursor: pointer; text-decoration: none; display: block; text-align: center;
+    transition: background 0.1s;
+  }
+  .mode-btn:hover { background: #ccc; }
+  .mode-btn.outline {
+    background: #000; color: #fff; border: 2px solid #fff;
+  }
+  .mode-btn.outline:hover { background: #fff; color: #000; }
+
+  .hint { font-size: 11px; color: #444; letter-spacing: 2px; text-align: center; line-height: 2; }
+</style>
+</head>
+<body>
+<div class="menu">
+  <h1>PONG</h1>
+  <p class="subtitle">SELECT MODE</p>
+  <a class="mode-btn" href="bot.html">VS BOT</a>
+  <a class="mode-btn outline" href="local.html">LOCAL 2P</a>
+  <a class="mode-btn outline" href="online.html">ONLINE 2P</a>
+  <p class="hint">First to 7 wins</p>
+</div>
+</body>
+</html>
